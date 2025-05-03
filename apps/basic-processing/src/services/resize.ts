@@ -27,7 +27,11 @@ export class ResizeService {
       const inputImage = await fs.promises.readFile(imagePath);
       const { data: inputBuffer, info: inputInfo } = await sharp(inputImage).raw().toBuffer({ resolveWithObject: true });
 
-      const resizedBuffer = this.bilinearInterpolation(inputBuffer, inputInfo.height,  inputInfo.width, height, width);
+      if (inputInfo.channels !== 3) {
+        throw new Error('Unsupported image format: Only RGB images are supported');
+      }
+
+      const resizedBuffer = this.bilinearInterpolation(inputBuffer, inputInfo.width, inputInfo.height, width, height);
 
       // Save the resized image
       await sharp(resizedBuffer, {
@@ -62,6 +66,34 @@ export class ResizeService {
     outputHeight: number
   ): Buffer {
     const outputBuffer = Buffer.alloc(outputWidth * outputHeight * 3);
+
+    for (let y = 0; y < outputHeight; y++) {
+      for (let x = 0; x < outputWidth; x++) {
+        const xRatio = (x / (outputWidth - 1)) * (inputWidth - 1);
+        const yRatio = (y / (outputHeight - 1)) * (inputHeight - 1);
+
+        const xL = Math.floor(xRatio);
+        const xH = Math.min(Math.ceil(xRatio), inputWidth - 1);
+        const yL = Math.floor(yRatio);
+        const yH = Math.min(Math.ceil(yRatio), inputHeight - 1);
+
+        const xWeight = xRatio - xL;
+        const yWeight = yRatio - yL;
+
+        for (let c = 0; c < 3; c++) {
+          const topLeft = inputBuffer[(yL * inputWidth + xL) * 3 + c];
+          const topRight = inputBuffer[(yL * inputWidth + xH) * 3 + c];
+          const bottomLeft = inputBuffer[(yH * inputWidth + xL) * 3 + c];
+          const bottomRight = inputBuffer[(yH * inputWidth + xH) * 3 + c];
+
+          const top = topLeft + xWeight * (topRight - topLeft);
+          const bottom = bottomLeft + xWeight * (bottomRight - bottomLeft);
+          const value = top + yWeight * (bottom - top);
+
+          outputBuffer[(y * outputWidth + x) * 3 + c] = Math.round(value);
+        }
+      }
+    }
 
     return outputBuffer;
   }
