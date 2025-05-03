@@ -12,7 +12,7 @@ import {
 } from './app.dto';
 
 /**
- * Controller for basic image processing operations.
+ 
  *
  * Handles fundamental image transformations such as:
  * - Resizing images
